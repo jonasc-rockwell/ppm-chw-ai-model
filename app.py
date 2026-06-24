@@ -3,9 +3,9 @@ import requests
 import pandas as pd
 import numpy as np
 
-st.set_page_config(page_title="Mall HVAC AI Optimizer", layout="wide")
+st.set_page_config(page_title="PPM HVAC AI Optimizer", layout="wide")
 
-st.title("❄️ High-End Mall Cooling AI Optimizer")
+st.title("❄️ Power Plant Mall Mall Cooling AI Optimizer")
 st.write("Predictive HVAC physics model driven by ECMWF weather data.")
 
 # 1. Calculate Wet-Bulb Temperature (Stull Formula)
