@@ -43,6 +43,8 @@ hz_map = {
     3500: {"primary": 60, "secondary": 45, "condenser": 60, "ct": 60}  # Worst-case maximum scaling
 }
 
+freqs = hz_map[current_tr_stage]
+
 # Physics-based Power calculations using Pump Affinity Laws
 def affinity_power(rated_kw, actual_hz):
     return rated_kw * ((actual_hz / 60.0) ** 3)
