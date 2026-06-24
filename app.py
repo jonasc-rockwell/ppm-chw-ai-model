@@ -3,11 +3,34 @@ import requests
 import pandas as pd
 import numpy as np
 import datetime
+import streamlit.components.v1 as components
 
 st.set_page_config(page_title="PPM HVAC AI Optimizer", layout="wide")
 
 st.title("Power Plant Mall HVAC Predictive Optimizer")
 st.write("Custom operational rules mapped against live ECMWF weather forecasts.")
+
+# -------------------------------------------------------------
+# Live GMT+8 Clock (HTML/JS snippet to allow ticking without reloading the server)
+# -------------------------------------------------------------
+clock_html = """
+<div id="clock" style="font-family: sans-serif; font-size: 16px; font-weight: bold; color: #1f77b4; padding-bottom: 10px;"></div>
+<script>
+    function updateTime() {
+        let d = new Date();
+        let optionsTime = { timeZone: 'Asia/Manila', hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' };
+        let optionsDate = { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' };
+        
+        let timeString = new Intl.DateTimeFormat('en-US', optionsTime).format(d);
+        let dateString = new Intl.DateTimeFormat('en-US', optionsDate).format(d);
+        
+        document.getElementById('clock').innerText = "Current PH Time: " + dateString + " " + timeString + " (GMT+8)";
+    }
+    setInterval(updateTime, 1000);
+    updateTime();
+</script>
+"""
+components.html(clock_html, height=40)
 
 # 1. Weather Fetch & Wet-Bulb Calculations
 def calculate_wet_bulb(t, rh):
@@ -16,6 +39,7 @@ def calculate_wet_bulb(t, rh):
 
 @st.cache_data(ttl="1h")
 def get_weather_data():
+    # Updated Coordinates
     url = "https://api.open-meteo.com/v1/ecmwf?latitude=14.56&longitude=121.04&hourly=temperature_2m,relative_humidity_2m&timezone=Asia%2FSingapore"
     response = requests.get(url)
     if response.status_code == 200:
@@ -36,21 +60,27 @@ st.sidebar.header("🗓️ Tomorrow's Operational Inputs")
 has_event = st.sidebar.checkbox("Event scheduled at 'The Fifth' tomorrow?", value=False)
 
 # Target Tomorrow's Window & Automatically Detect Day of the Week
-tomorrow = datetime.date.today() + datetime.timedelta(days=1)
+# Force calculation in GMT+8 so Streamlit Cloud (UTC) doesn't fall a day behind
+ph_tz = datetime.timezone(datetime.timedelta(hours=8))
+now_ph = datetime.datetime.now(ph_tz)
+tomorrow = now_ph.date() + datetime.timedelta(days=1)
 tomorrow_weekday = tomorrow.weekday() # 0 is Monday, 5 is Saturday, 6 is Sunday
 
 # Determine Mall Schedule automatically based on tomorrow's date
 if tomorrow_weekday == 5: # Saturday
     day_label = "Saturday"
     mall_open = "10:00 AM"
+    full_load_init = "9:00 AM"
     reduce_load = "9:00 PM"
 elif tomorrow_weekday == 6: # Sunday
     day_label = "Sunday"
     mall_open = "10:00 AM"
+    full_load_init = "9:00 AM"
     reduce_load = "8:00 PM"
 else: # Monday to Friday
     day_label = "Weekday (Mon-Fri)"
     mall_open = "11:00 AM"
+    full_load_init = "10:00 AM"
     reduce_load = "8:00 PM"
 
 if df_weather is not None:
@@ -81,7 +111,7 @@ if df_weather is not None:
         rec = hz_map[predicted_tr]
         
         # Display Strategy Panels
-        st.success(f"### 🎯 Tomorrow's Target Run Profile: {predicted_tr} TR Stage ({tomorrow.strftime('%B %d')})")
+        st.success(f"### 🎯 Tomorrow's Target Run Profile: {predicted_tr} TR Stage ({tomorrow.strftime('%m/%d/%Y')})")
         st.caption(f"**AI Strategy Analysis:** {reasoning}")
         
         # Layout Results Blocks
@@ -91,8 +121,8 @@ if df_weather is not None:
         with col1:
             st.info(f"📌 **Chiller Startup Sequences ({day_label})**\n"
                     "* **6:30 AM Precooling:** Start **Chiller 2 or Chiller 3** (1000 TR Magnetic Centrifugal).\n"
-                    f"* **{mall_open} Mall Opens:** Scale chillers online based on {predicted_tr} TR target.\n"
-                    f"* **{reduce_load} Load Reduction:** Drop 1000 TR roughly 1 hour prior to mall close.\n"
+                    f"* **{full_load_init} Full Load Init:** Initialize {predicted_tr} TR target 1 hour before {mall_open} mall opening.\n"
+                    f"* **{reduce_load} Load Reduction:** Drop to **1000 TR** (1 hour prior to mall close).\n"
                     "* **Closing:** Shutdown plant after cinema/event ends.")
         with col2:
             st.metric("Recommended Active Cooling Towers", f"{rec['towers']} Cells", f"Standard is 5 Cells")
@@ -106,7 +136,7 @@ if df_weather is not None:
         c4.metric("Cooling Tower Fans", f"{rec['ct_hz']} Hz")
 
         st.markdown("---")
-        st.subheader(f"📊 Tomorrow's Hourly Temperature Profiles (°C) - {tomorrow.strftime('%b %d')}")
+        st.subheader(f"📊 Tomorrow's Hourly Temperature Profiles (°C) - {tomorrow.strftime('%m/%d/%Y')}")
         st.line_chart(df_tomorrow.set_index('time')[['temp', 'wet_bulb']])
         
     else:
