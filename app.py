@@ -2,17 +2,14 @@ import streamlit as st
 import requests
 import pandas as pd
 import numpy as np
+from streamlit_gsheets import GSheetsConnection
 
-st.set_page_config(page_title="Mall HVAC AI Optimizer", layout="wide")
+st.set_page_config(page_title="PPM HVAC AI Optimizer", layout="wide")
 
-# Initialize persistent session memory for logs if it doesn't exist
-if "hvac_logs" not in st.session_state:
-    st.session_state.hvac_logs = pd.DataFrame(columns=[
-        "Date", "CH2_kWh", "CH3_kWh", "CH4_kWh", "CH5_kWh", "CH6_kWh", 
-        "Avg_Indoor_Temp", "Avg_CO2", "Avg_RH", "TR_Stage", "Event_The_Fifth"
-    ])
+st.title("❄️ Power Plant Mall Cooling AI Optimizer")
 
-st.title("❄️ High-End Mall Cooling AI Optimizer")
+# Establish connection to our Google Sheet
+conn = st.connection("gsheets", type=GSheetsConnection)
 
 # Create Navigation Tabs
 tab1, tab2 = st.tabs(["📊 Dashboard & Forecast", "⚙️ Data Entry"])
@@ -21,12 +18,11 @@ tab1, tab2 = st.tabs(["📊 Dashboard & Forecast", "⚙️ Data Entry"])
 with tab2:
     st.header("📝 Daily Manual Log Entry Point")
     
-    # Simple Passcode Protection Barrier
     passcode = st.text_input("Enter Admin Passcode to Unlock Entry Form", type="password")
     
-    if passcode == "1234": # Change '1234' to your preferred passcode later
+    if passcode == "1234": 
         st.success("Access Granted")
-        st.write("Input the morning meter readings. Note: The reading taken today represents the total consumption accumulated over the previous day.")
+        st.write("Input the morning meter readings. Note: Today's entry tracks total consumption accumulated over the previous day.")
         
         with st.form("log_form", clear_on_submit=True):
             col1, col2, col3 = st.columns(3)
@@ -50,14 +46,24 @@ with tab2:
             submit_btn = st.form_submit_button("Save Day's Logs to AI Database")
             
             if submit_btn:
-                new_row = {
+                # 1. Pull existing live data from Google Sheets
+                existing_data = conn.read(ttl="0d")
+                
+                # 2. Structure new entry
+                new_row = pd.DataFrame([{
                     "Date": log_date.strftime("%Y-%m-%d"), 
                     "CH2_kWh": ch2, "CH3_kWh": ch3, "CH4_kWh": ch4, "CH5_kWh": ch5, "CH6_kWh": ch6, 
                     "Avg_Indoor_Temp": in_temp, "Avg_CO2": co2, "Avg_RH": rh, 
                     "TR_Stage": tr_stage, "Event_The_Fifth": "Yes" if event_day else "No"
-                }
-                st.session_state.hvac_logs = pd.concat([st.session_state.hvac_logs, pd.DataFrame([new_row])], ignore_index=True)
-                st.success(f"Successfully saved data for {log_date.strftime('%Y-%m-%d')}!")
+                }])
+                
+                # 3. Append and update Google Sheet
+                updated_df = pd.concat([existing_data, new_row], ignore_index=True)
+                conn.update(data=updated_df)
+                
+                st.cache_data.clear() # Clear cached data to refresh view instantly
+                st.success(f"Successfully saved data to Google Sheets for {log_date.strftime('%Y-%m-%d')}!")
+                
     elif passcode != "":
         st.error("Incorrect Passcode. Access Denied.")
 
@@ -110,11 +116,16 @@ with tab1:
     col4.metric("Cooling Tower Fan", f"{p_ct:.1f} kW", f"{freqs['ct']} Hz")
 
     st.markdown("---")
-    st.subheader("📋 Logged Chiller History Database")
-    if not st.session_state.hvac_logs.empty:
-        st.dataframe(st.session_state.hvac_logs, use_container_width=True)
-    else:
-        st.info("No logs entered yet. Go to the 'Data Entry' tab to log readings.")
+    st.subheader("📋 Logged Chiller History Database (Live from Google Sheets)")
+    
+    try:
+        df_sheet = conn.read(ttl="10m")
+        if not df_sheet.empty:
+            st.dataframe(df_sheet, use_container_width=True)
+        else:
+            st.info("Google Sheet is empty. Go to 'Data Entry' to save entries.")
+    except Exception as e:
+        st.error("Awaiting Google Sheet connection layout mapping or empty table structure.")
 
     if df_weather is not None:
         st.markdown("---")
