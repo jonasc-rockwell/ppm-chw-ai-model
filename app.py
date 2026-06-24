@@ -30,18 +30,18 @@ def get_weather_data():
 
 df_weather = get_weather_data()
 
-# 3. Sidebar Configuration for Plant Load Operations
+# Updated Sidebar Configuration for Plant Load Operations
 st.sidebar.header("Plant Operating Parameters")
-current_tr_stage = st.sidebar.selectbox("Simulate Plant Load Stage", [1500, 2000, 2500])
+current_tr_stage = st.sidebar.selectbox("Simulate Plant Load Stage", [1500, 2000, 2500, 3000, 3500])
 
-# VFD Frequency schedule provided from your logs
+# VFD Frequency schedule updated with 3000 TR and 3500 TR configurations
 hz_map = {
     1500: {"primary": 40, "secondary": 28, "condenser": 42, "ct": 40},
     2000: {"primary": 45, "secondary": 28, "condenser": 44, "ct": 40},
-    2500: {"primary": 33, "secondary": 28, "condenser": 35, "ct": 40}
+    2500: {"primary": 33, "secondary": 28, "condenser": 35, "ct": 40},
+    3000: {"primary": 50, "secondary": 35, "condenser": 50, "ct": 50}, # Estimated high-load scaling
+    3500: {"primary": 60, "secondary": 45, "condenser": 60, "ct": 60}  # Worst-case maximum scaling
 }
-
-freqs = hz_map[current_tr_stage]
 
 # Physics-based Power calculations using Pump Affinity Laws
 def affinity_power(rated_kw, actual_hz):
